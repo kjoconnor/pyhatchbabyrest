@@ -35,7 +35,7 @@ class PyHatchBabyRest(object):
                     addr = device["address"]
                     break
             else:
-                raise RuntimeException(
+                raise RuntimeError(
                     "No address provided and could not find device via scan."
                 )
 
