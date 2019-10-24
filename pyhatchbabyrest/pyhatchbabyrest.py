@@ -23,9 +23,12 @@ class PyHatchBabyRestSound(IntEnum):
 class PyHatchBabyRest(object):
     COLOR_GRADIENT = (254, 254, 254)  # setting this color turns on Gradient mode
 
-    def __init__(self, addr=None):
-        self.adapter = pygatt.GATTToolBackend()
-        self.adapter.start()
+    def __init__(self, addr=None, adapter=None):
+        if adapter is None:
+            self.adapter = pygatt.GATTToolBackend()
+            self.adapter.start()
+        else:
+            self.adapter = adapter
 
         if addr is None:
             devices = self.adapter.scan()
