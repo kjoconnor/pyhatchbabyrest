@@ -76,7 +76,7 @@ class PyHatchBabyRest(object):
         self.brightness = brightness
         self.sound = sound
         self.volume = volume
-        self.power = not bool(int("11000000", 2) & int(response[14], 16))
+        self.power = power
 
     def disconnect(self):
         return self.device.disconnect()
