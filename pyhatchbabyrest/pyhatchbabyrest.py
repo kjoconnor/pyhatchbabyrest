@@ -1,29 +1,18 @@
 import time
 
-from enum import IntEnum
+import pygatt  # type: ignore
 
-import pygatt
-
-
-class PyHatchBabyRestSound(IntEnum):
-    none = 0
-    stream = 2
-    noise = 3
-    dryer = 4
-    ocean = 5
-    wind = 6
-    rain = 7
-    bird = 9
-    crickets = 10
-    brahms = 11
-    twinkle = 13
-    rockabye = 14
+from .constants import CHAR_TX, CHAR_FEEDBACK, PyHatchBabyRestSound
 
 
 class PyHatchBabyRest(object):
-    COLOR_GRADIENT = (254, 254, 254)  # setting this color turns on Gradient mode
+    """ A synchronous interface to a Hatch Baby Rest device using pygatt. """
+    def __init__(self, addr: str = None, adapter: pygatt.GATTToolBackend = None):
+        """ Instantiate the interface.
 
-    def __init__(self, addr=None, adapter=None):
+        :param addr: A specific address to connect to.
+        :param adapter: An already instantiated `pygatt.GATTToolBackend`.
+        """
         if adapter is None:
             self.adapter = pygatt.GATTToolBackend()
             self.adapter.start()
@@ -46,18 +35,20 @@ class PyHatchBabyRest(object):
             addr, address_type=pygatt.BLEAddressType.random
         )
 
-        self._char_tx = "02240002-5efd-47eb-9c1a-de53f7a2b232"
-        self._char_feedback = "02260002-5efd-47eb-9c1a-de53f7a2b232"
-
         self._refresh_data()
 
-    def _send_command(self, command):
-        self.device.char_write(self._char_tx, bytearray(command, "utf-8"))
+    def _send_command(self, command: str):
+        """ Send a command to the device.
+
+        :param command: The command to send.
+        """
+        self.device.char_write(CHAR_TX, bytearray(command, "utf-8"))
         time.sleep(0.25)
         self._refresh_data()
 
-    def _refresh_data(self):
-        response = [hex(x) for x in self.device.char_read(self._char_feedback)]
+    def _refresh_data(self) -> None:
+        """ Request updated data from the device and set the local attributes. """
+        response = [hex(x) for x in self.device.char_read(CHAR_FEEDBACK)]
 
         # Make sure the data is where we think it is
         assert response[5] == "0x43"  # color
@@ -97,13 +88,13 @@ class PyHatchBabyRest(object):
         command = "SV{:02x}".format(volume)
         self._send_command(command)
 
-    def set_color(self, red, green, blue, rgb=None):
+    def set_color(self, red: int, green: int, blue: int):
         self._refresh_data()
 
         command = "SC{:02x}{:02x}{:02x}{:02x}".format(red, green, blue, self.brightness)
         self._send_command(command)
 
-    def set_brightness(self, brightness):
+    def set_brightness(self, brightness: int):
         self._refresh_data()
 
         command = "SC{:02x}{:02x}{:02x}{:02x}".format(

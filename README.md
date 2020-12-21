@@ -2,14 +2,17 @@
 This library will allow you to control a [Hatch Baby Rest device](https://www.hatchbaby.com/rest) (note, /not/ the Hatch Baby Rest+, which is Wi-Fi enabled) over [BLE](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy).
 
 ## Requirements
-This was tested on a Raspberry Pi 3 Model B Rev 1.2, but should work on any Unix system that is compatible with the `GATTToolBackend` of [pygatt](https://github.com/peplin/pygatt).
+The pygatt backend was tested on a Raspberry Pi 3 Model B Rev 1.2, but should work on any Unix system that is compatible with the `GATTToolBackend` of [pygatt](https://github.com/peplin/pygatt).
+
+The bleak (async) backend was tested on a 2019 MacBook Pro, but should work on any system that [bleak](https://github.com/hbldh/bleak) is compatible with.
 
 ## Installation
 `pip install pyhatchbabyrest`
 
 ## Examples
+### pygatt backend (synchronous)
 ```python3
-In [1]: from pyhatchbabyrest import PyHatchBabyRest, PyHatchBabyRestSound
+In [1]: from pyhatchbabyrest import PyHatchBabyRest
 
 In [2]: rest = PyHatchBabyRest()
 
@@ -47,6 +50,30 @@ In [15]: rest.disconnect()
 
 In [16]: rest.connected
 Out[16]: False
+```
+
+### bleak backend (async and a little more portable)
+```python3
+In [1]: from pyhatchbabyrest import PyHatchBabyRestAsync
+
+In [2]: rest = PyHatchBabyRestAsync()
+
+In [3]: import asyncio
+
+In [4]: loop = asyncio.get_event_loop()
+
+In [5]: r = loop.run_until_complete
+
+In [6]: r(rest.power_on())
+
+In [7]: r(rest.set_volume(100))
+
+In [8]: r(rest.set_volume(10))
+
+In [9]: r(rest.power_off())
+
+In [10]: rest.sound
+Out[10]: <PyHatchBabyRestSound.noise: 3>
 ```
 
 ## Credits

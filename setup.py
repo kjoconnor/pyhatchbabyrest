@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pyhatchbabyrest",
-    version="1.0.1",
+    version="2.0.0",
     author="Kevin O'Connor",
     author_email="kjoconnor@gmail.com",
     description="Python library to control Hatch Baby Rest devices",
@@ -21,6 +21,7 @@ setuptools.setup(
     ],
     python_requires='>=3.5',
     install_requires=[
+        'bleak',
         'pygatt',
     ],
 )
