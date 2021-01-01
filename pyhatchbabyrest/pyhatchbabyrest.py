@@ -23,7 +23,7 @@ class PyHatchBabyRest(object):
             devices = self.adapter.scan()
 
             for device in devices:
-                if device["address"][:8] == "F3:53:11":
+                if device["name"] == "Hatch Rest":
                     addr = device["address"]
                     break
             else:
