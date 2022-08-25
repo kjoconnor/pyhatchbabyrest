@@ -106,7 +106,7 @@ class PyHatchBabyRestAsync(object):
     @property
     async def connected(self):
         async with BleakClient(self.device) as client:
-            return await client.is_connected()
+            return client.is_connected
 
     @property
     def name(self):
