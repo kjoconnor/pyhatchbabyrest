@@ -3,6 +3,7 @@ from enum import IntEnum
 COLOR_GRADIENT = (254, 254, 254)  # setting this color turns on Gradient mode
 CHAR_TX = "02240002-5efd-47eb-9c1a-de53f7a2b232"
 CHAR_FEEDBACK = "02260002-5efd-47eb-9c1a-de53f7a2b232"
+BT_MANUFACTURER_ID = 1076
 
 
 class PyHatchBabyRestSound(IntEnum):

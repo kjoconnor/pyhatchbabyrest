@@ -1,37 +1,53 @@
 import asyncio
+from typing import Optional
+from typing import Union
 
-from bleak import BleakClient, discover  # type: ignore
+from bleak import BleakClient
+from bleak import BleakScanner
+from bleak.backends.device import BLEDevice
 
-from .constants import CHAR_TX, CHAR_FEEDBACK, PyHatchBabyRestSound
+from .constants import BT_MANUFACTURER_ID
+from .constants import CHAR_FEEDBACK
+from .constants import CHAR_TX
+from .constants import PyHatchBabyRestSound
 
 
 class PyHatchBabyRestAsync(object):
-    """ An asynchronous interface to a Hatch Baby Rest device using bleak. """
-    def __init__(self, addr: str = None):
-        loop = asyncio.get_event_loop()
-        devices = loop.run_until_complete(discover())
+    """An asynchronous interface to a Hatch Baby Rest device using bleak."""
 
-        for device in devices:
-            if addr:
-                if device.address == addr:
-                    self.device = device
-                    break
-            else:
-                try:
-                    if 1076 in device.metadata["manufacturer_data"].keys():
-                        self.device = device
-                        break
-                except KeyError:
-                    pass
-        else:
-            raise RuntimeError(
-                "No address provided and could not find device via scan."
+    def __init__(
+        self,
+        address_or_ble_device: Union[str, BLEDevice, None] = None,
+        scanner: Optional[BleakScanner] = None,
+    ):
+        loop = asyncio.get_event_loop()
+        scanner = BleakScanner() if scanner is None else scanner
+
+        if not address_or_ble_device:
+            device = loop.run_until_complete(
+                scanner.find_device_by_filter(
+                    lambda device, _: BT_MANUFACTURER_ID
+                    in device.metadata["manufacturer_data"].keys()
+                )
             )
+        elif isinstance(address_or_ble_device, BLEDevice):
+            device = address_or_ble_device
+        else:
+            device = loop.run_until_complete(
+                scanner.find_device_by_address(address_or_ble_device)
+            )
+
+        if device is None:
+            raise RuntimeError(
+                "No address or BLEDevice provided and could not find device via scan."
+            )
+
+        self.device = device
 
         loop.run_until_complete(self._refresh_data())
 
     async def _send_command(self, command: str):
-        """ Send a command do the device.
+        """Send a command do the device.
 
         :param command: The command to send.
         """
