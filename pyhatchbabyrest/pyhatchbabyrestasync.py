@@ -19,38 +19,37 @@ class PyHatchBabyRestAsync(object):
         self,
         address_or_ble_device: Union[str, BLEDevice, None] = None,
         scanner: Optional[BleakScanner] = None,
+        scan_now: bool = True,
+        refresh_now: bool = True,
     ):
-        loop = asyncio.get_event_loop()
-        scanner = BleakScanner() if scanner is None else scanner
+        self.scanner = scanner
 
-        if not address_or_ble_device:
-            device = loop.run_until_complete(
-                scanner.find_device_by_filter(
-                    lambda device, _: BT_MANUFACTURER_ID
-                    in device.metadata["manufacturer_data"].keys()
-                )
-            )
-        elif isinstance(address_or_ble_device, BLEDevice):
-            device = address_or_ble_device
+        if isinstance(address_or_ble_device, BLEDevice):
+            self.device = address_or_ble_device
+            self.address = address_or_ble_device.address
         else:
-            device = loop.run_until_complete(
-                scanner.find_device_by_address(address_or_ble_device)
-            )
+            self.address = address_or_ble_device
+            if scan_now:
+                self.device = asyncio.get_event_loop().run_until_complete(self.scan())
+            else:
+                self.device = None
 
-        if device is None:
-            raise RuntimeError(
-                "No address or BLEDevice provided and could not find device via scan."
-            )
+        if refresh_now:
+            asyncio.get_event_loop().run_until_complete(self.refresh_data())
 
-        self.device = device
-
-        loop.run_until_complete(self._refresh_data())
+    async def _ensure_scan(self) -> BLEDevice:
+        """Ensures that a device has been scanned for in case it was skipped on init"""
+        if not self.device:
+            return await self.scan()
+        return self.device
 
     async def _send_command(self, command: str):
         """Send a command do the device.
 
         :param command: The command to send.
         """
+        self.device = await self._ensure_scan()
+
         async with BleakClient(self.device) as client:
             await client.write_gatt_char(
                 char_specifier=CHAR_TX,
@@ -58,9 +57,32 @@ class PyHatchBabyRestAsync(object):
                 response=True,
             )
         await asyncio.sleep(0.25)
-        await self._refresh_data()
+        await self.refresh_data()
 
-    async def _refresh_data(self):
+    async def scan(self) -> BLEDevice:
+        self.scanner = BleakScanner() if self.scanner is None else self.scanner
+
+        if self.address:
+            device = await self.scanner.find_device_by_address(self.address)
+        else:
+            device = await self.scanner.find_device_by_filter(
+                lambda device, _: BT_MANUFACTURER_ID
+                in device.metadata["manufacturer_data"].keys()
+            )
+
+        if device is None:
+            raise RuntimeError(
+                "No address or BLEDevice provided and cannot find device in scan"
+            )
+
+        self.device = device
+        self.address = device.address
+
+        return self.device
+
+    async def refresh_data(self):
+        self.device = await self._ensure_scan()
+
         async with BleakClient(self.device) as client:
             raw_char_read = await client.read_gatt_char(CHAR_FEEDBACK)
 
@@ -86,6 +108,7 @@ class PyHatchBabyRestAsync(object):
         self.power = power
 
     async def disconnect(self):
+        self.device = await self._ensure_scan()
         async with BleakClient(self.device) as client:
             return await client.disconnect()
 
@@ -106,13 +129,13 @@ class PyHatchBabyRestAsync(object):
         return await self._send_command(command)
 
     async def set_color(self, red, green, blue):
-        await self._refresh_data()
+        await self.refresh_data()
 
         command = "SC{:02x}{:02x}{:02x}{:02x}".format(red, green, blue, self.brightness)
         return await self._send_command(command)
 
     async def set_brightness(self, brightness):
-        await self._refresh_data()
+        await self.refresh_data()
 
         command = "SC{:02x}{:02x}{:02x}{:02x}".format(
             self.color[0], self.color[1], self.color[2], brightness
@@ -121,9 +144,31 @@ class PyHatchBabyRestAsync(object):
 
     @property
     async def connected(self):
+        self.device = await self._ensure_scan()
         async with BleakClient(self.device) as client:
             return await client.is_connected()
 
     @property
     def name(self):
-        return self.device.name
+        return self.device.name if self.device else None
+
+
+async def connect(
+    address_or_ble_device: Union[str, BLEDevice, None] = None,
+    scanner: Optional[BleakScanner] = None,
+    scan_now: bool = True,
+    refresh_now: bool = True,
+) -> PyHatchBabyRestAsync:
+    rest = PyHatchBabyRestAsync(
+        address_or_ble_device,
+        scanner=scanner,
+        scan_now=False,
+        refresh_now=False,
+    )
+
+    if scan_now:
+        await rest.scan()
+    if refresh_now:
+        await rest.refresh_data()
+
+    return rest
