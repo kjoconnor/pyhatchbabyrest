@@ -76,5 +76,24 @@ In [10]: rest.sound
 Out[10]: <PyHatchBabyRestSound.noise: 3>
 ```
 
+#### NOTE: Using PyHatchBabyRestAsync from async code
+The constructor, by default, executes directly against the event loop. This doesn't work if it is executed within an already running coroutine. To construct the client, all async calls must be done outside of the constructor.
+
+This has been all wrapped up in a function for ease of use.
+
+```python3
+import asyncio
+
+from pyhatchbabyrest import connect_async
+
+
+async def main():
+    rest = await connect_async()
+    await rest.power_on()
+
+
+rest = asyncio.run(main())
+```
+
 ## Credits
 Huge thanks to @Marcus-L for their repo at [GitHub - Marcus-L/m4rcus.HatchBaby.Rest: Control Hatch Baby Rest devices using Bluetooth LE](https://github.com/Marcus-L/m4rcus.HatchBaby.Rest) which did all the hard work of finding the right characteristics, commands, etc.
