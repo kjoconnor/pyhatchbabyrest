@@ -1,6 +1,8 @@
 import asyncio
 from typing import Optional
 from typing import Union
+from dataclasses import dataclass
+from typing import Optional, Callable
 
 from bleak import BleakClient
 from bleak import BleakScanner
@@ -9,7 +11,9 @@ from bleak.backends.device import BLEDevice
 from .constants import BT_MANUFACTURER_ID
 from .constants import CHAR_FEEDBACK
 from .constants import CHAR_TX
+from .constants import CHAR_RX
 from .constants import PyHatchBabyRestSound
+from .constants import FAVORITE_ENABLED
 
 
 class PyHatchBabyRestAsync(object):
@@ -43,7 +47,7 @@ class PyHatchBabyRestAsync(object):
             return await self.scan()
         return self.device
 
-    async def _send_command(self, command: str):
+    async def _send_command(self, command: str, response_callback: Optional[Callable] = None):
         """Send a command do the device.
 
         :param command: The command to send.
@@ -51,13 +55,21 @@ class PyHatchBabyRestAsync(object):
         self.device = await self._ensure_scan()
 
         async with BleakClient(self.device) as client:
+            if response_callback:
+                await client.start_notify(CHAR_RX, response_callback)
+
             await client.write_gatt_char(
                 char_specifier=CHAR_TX,
                 data=bytearray(command, "utf-8"),
                 response=True,
             )
+
+            if response_callback:
+                await asyncio.sleep(0.5)
+                await client.stop_notify(CHAR_RX)
+
         await asyncio.sleep(0.25)
-        await self.refresh_data()
+        await self.refresh_data()      
 
     async def scan(self) -> BLEDevice:
         self.scanner = BleakScanner() if self.scanner is None else self.scanner
@@ -141,6 +153,48 @@ class PyHatchBabyRestAsync(object):
             self.color[0], self.color[1], self.color[2], brightness
         )
         return await self._send_command(command)
+    
+    @dataclass
+    class Favorite:
+        color:      tuple[int, int, int]
+        sound:      PyHatchBabyRestSound
+        enabled:    bool
+        brightness: int
+        volume:     int
+
+    async def req_favorite(self, num):
+        # initialize favorites list
+        if not hasattr(self, 'favorites'):
+            default_fav = self.Favorite(
+                color=(255, 255, 255),
+                sound=PyHatchBabyRestSound.none,
+                enabled=False,
+                brightness=0,
+                volume=0
+            )
+            # make 9 spots so index 0 is always unused
+            self.favorites = [default_fav]*9
+
+        # request favorite number num
+        command = "PGB{:02}".format(num)
+        self.favorite_number = num
+        await self._send_command(command, self._parse_favorite_callback)
+        return self.favorites[num]
+
+    def _parse_favorite_callback(self, characteristic, data):
+        if (len(data) == 15):
+            red, green, blue, brightness = data[12:8:-1]
+            volume = data[2]
+            sound = data[1]
+            enabled = data[13] == FAVORITE_ENABLED
+            self.favorites[self.favorite_number] = self.Favorite(
+                color = (red, green, blue),
+                sound = PyHatchBabyRestSound(sound),
+                enabled = enabled,
+                brightness = brightness,
+                volume = volume
+            ) 
+
 
     @property
     async def connected(self):
