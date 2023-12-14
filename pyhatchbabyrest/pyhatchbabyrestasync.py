@@ -1,6 +1,7 @@
 import asyncio
 from typing import Optional
 from typing import Union
+from time import localtime, gmtime, struct_time, strftime
 
 from bleak import BleakClient
 from bleak import BleakScanner
@@ -89,9 +90,12 @@ class PyHatchBabyRestAsync(object):
         response = [hex(x) for x in raw_char_read]
 
         # Make sure the data is where we think it is
+        assert response[0] == "0x54"  # time
         assert response[5] == "0x43"  # color
         assert response[10] == "0x53"  # audio
         assert response[13] == "0x50"  # power
+
+        time = int(''.join(hex_byte[2:] for hex_byte in response[1:5]), 16)
 
         red, green, blue, brightness = [int(x, 16) for x in response[6:10]]
 
@@ -103,6 +107,10 @@ class PyHatchBabyRestAsync(object):
 
         self.color = (red, green, blue)
         self.brightness = brightness
+
+        # Hatch app uses epoch seconds to local time without timezone
+        self.time = gmtime(time)
+        
         self.sound = sound
         self.volume = volume
         self.power = power
@@ -140,6 +148,12 @@ class PyHatchBabyRestAsync(object):
         command = "SC{:02x}{:02x}{:02x}{:02x}".format(
             self.color[0], self.color[1], self.color[2], brightness
         )
+        return await self._send_command(command)
+    
+    async def set_time(self, time: struct_time = None):
+        if (time is None):
+            time = localtime()
+        command = strftime("ST%Y%m%d%H%M%SU", time)
         return await self._send_command(command)
 
     @property
