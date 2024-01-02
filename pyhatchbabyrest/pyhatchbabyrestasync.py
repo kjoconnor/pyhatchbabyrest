@@ -12,6 +12,21 @@ from .constants import CHAR_TX
 from .constants import PyHatchBabyRestSound
 
 
+class SaveConnectBleakClient(BleakClient):
+    was_open: bool = False
+    async def __aenter__(self):
+        if self.is_connected:
+            self.was_open = True
+        else:
+            await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if not self.was_open:
+            await self.disconnect()
+            self.was_open = False
+
+
 class PyHatchBabyRestAsync(object):
     """An asynchronous interface to a Hatch Baby Rest device using bleak."""
 
@@ -21,8 +36,14 @@ class PyHatchBabyRestAsync(object):
         scanner: Optional[BleakScanner] = None,
         scan_now: bool = True,
         refresh_now: bool = True,
+        auto_refresh: bool = True,
     ):
         self.scanner = scanner
+        self.auto_refresh = auto_refresh
+
+        self.device: Optional[BLEDevice]
+        self.address: Optional[str]
+        self._client: Optional[SaveConnectBleakClient] = None
 
         if isinstance(address_or_ble_device, BLEDevice):
             self.device = address_or_ble_device
@@ -37,6 +58,15 @@ class PyHatchBabyRestAsync(object):
         if refresh_now:
             asyncio.get_event_loop().run_until_complete(self.refresh_data())
 
+    @property
+    async def client(self) -> SaveConnectBleakClient:
+        if self._client:
+            return self._client
+
+        self._client = SaveConnectBleakClient(await self._ensure_scan())
+
+        return self._client
+
     async def _ensure_scan(self) -> BLEDevice:
         """Ensures that a device has been scanned for in case it was skipped on init"""
         if not self.device:
@@ -50,14 +80,16 @@ class PyHatchBabyRestAsync(object):
         """
         self.device = await self._ensure_scan()
 
-        async with BleakClient(self.device) as client:
+        async with await self.client as client:
             await client.write_gatt_char(
                 char_specifier=CHAR_TX,
                 data=bytearray(command, "utf-8"),
                 response=True,
             )
-        await asyncio.sleep(0.25)
-        await self.refresh_data()
+
+            if self.auto_refresh:
+                await asyncio.sleep(0.25)
+                await self.refresh_data()
 
     async def scan(self) -> BLEDevice:
         self.scanner = BleakScanner() if self.scanner is None else self.scanner
@@ -83,7 +115,7 @@ class PyHatchBabyRestAsync(object):
     async def refresh_data(self):
         self.device = await self._ensure_scan()
 
-        async with BleakClient(self.device) as client:
+        async with await self.client as client:
             raw_char_read = await client.read_gatt_char(CHAR_FEEDBACK)
 
         response = [hex(x) for x in raw_char_read]
@@ -107,9 +139,14 @@ class PyHatchBabyRestAsync(object):
         self.volume = volume
         self.power = power
 
+    async def connect(self):
+        client = await self.client
+        if not client.is_connected:
+            return await client.connect()
+
     async def disconnect(self):
-        self.device = await self._ensure_scan()
-        async with BleakClient(self.device) as client:
+        client = await self.client
+        if client.is_connected:
             return await client.disconnect()
 
     async def power_on(self):
@@ -143,14 +180,16 @@ class PyHatchBabyRestAsync(object):
         return await self._send_command(command)
 
     @property
-    async def connected(self):
-        self.device = await self._ensure_scan()
-        async with BleakClient(self.device) as client:
-            return client.is_connected
-
-    @property
     def name(self):
         return self.device.name if self.device else None
+
+    @property
+    async def is_connected(self) -> bool:
+        if not self._client:
+            return False
+
+        client = await self.client
+        return client.is_connected
 
 
 async def connect(
@@ -158,12 +197,14 @@ async def connect(
     scanner: Optional[BleakScanner] = None,
     scan_now: bool = True,
     refresh_now: bool = True,
+    auto_refresh: bool = True,
 ) -> PyHatchBabyRestAsync:
     rest = PyHatchBabyRestAsync(
         address_or_ble_device,
         scanner=scanner,
         scan_now=False,
         refresh_now=False,
+        auto_refresh=auto_refresh,
     )
 
     if scan_now:
